@@ -5,11 +5,11 @@ $WorkDir = "C:\ZabbixAuto"
 $AgentPath = "C:\Program Files\Zabbix Agent 2"
 $ConfigFile = "$AgentPath\zabbix_agent2.conf"
 
-# Working download URL (Zabbix 7.0.5 LTS)
+# Correct Zabbix 7.0.5 LTS URL
 $downloadUrl = "https://cdn.zabbix.com/zabbix/binaries/stable/7.0/7.0.5/zabbix_agent2-7.0.5-windows-amd64-openssl.zip"
 $zipFile = "$WorkDir\zabbix.zip"
 
-# Create work directory
+# Create working folder
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 
 # Detect hostname & IP
@@ -23,18 +23,23 @@ Write-Host "Detected IP Address: $IPAddress"
 Write-Host "Downloading Zabbix Agent 2 ZIP package..."
 Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile
 
-# Extract files
+# Extract ZIP
 Write-Host "Extracting Zabbix Agent 2..."
-Expand-Archive -Path $zipFile -DestinationPath "$WorkDir\unzipped" -Force
+$UnzipPath = "$WorkDir\unzipped"
+Expand-Archive -Path $zipFile -DestinationPath $UnzipPath -Force
+
+# Detect extracted folder name
+$ExtractedFolder = Get-ChildItem -Path $UnzipPath | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+$ExtractedPath = $ExtractedFolder.FullName
 
 # Create target folder
 New-Item -ItemType Directory -Force -Path $AgentPath | Out-Null
 
 # Copy binaries
-Copy-Item "$WorkDir\unzipped\bin\zabbix_agent2.exe" $AgentPath -Force
-Copy-Item "$WorkDir\unzipped\conf\zabbix_agent2.conf" $AgentPath -Force
+Copy-Item "$ExtractedPath\bin\zabbix_agent2.exe" $AgentPath -Force
+Copy-Item "$ExtractedPath\conf\zabbix_agent2.conf" $AgentPath -Force
 
-# Configure Zabbix agent
+# Configure agent
 (Get-Content $ConfigFile) `
     -replace "^Server=.*", "Server=$ServerIP" `
     -replace "^ServerActive=.*", "ServerActive=$ServerIP" `
