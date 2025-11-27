@@ -1,64 +1,56 @@
-# =============================================
-# FULLY AUTOMATIC WINDOWS ZABBIX AGENT 2 DEPLOY
-# =============================================
+Write-Host "Starting Zabbix Agent auto deployment..."
 
-Write-Host "Starting Zabbix Agent auto deployment..." -ForegroundColor Cyan
-
-# -------- SETTINGS --------
-$ZabbixServer = "103.127.29.5"
-$ZabbixVersion = "7.0.4"
-# --------------------------
-
-# Auto detect hostname & IP
-$HostName = (hostname)
-$IpAddress = (Get-NetIPAddress -AddressFamily IPv4 |
-    Where-Object { $_.IPAddress -notmatch "169.*|127.*" } |
-    Select-Object -First 1 -ExpandProperty IPAddress)
-
-Write-Host "Detected Hostname: $HostName"
-Write-Host "Detected IP Address: $IpAddress"
-
-# Work directory
+$ServerIP = "103.127.29.5"
 $WorkDir = "C:\ZabbixAuto"
+$AgentPath = "C:\Program Files\Zabbix Agent 2"
+$ConfigFile = "$AgentPath\zabbix_agent2.conf"
+
+# Working download URL (Zabbix 7.0.5 LTS)
+$downloadUrl = "https://cdn.zabbix.com/zabbix/binaries/stable/7.0/7.0.5/zabbix_agent2-7.0.5-windows-amd64-openssl.zip"
+$zipFile = "$WorkDir\zabbix.zip"
+
+# Create work directory
 New-Item -ItemType Directory -Force -Path $WorkDir | Out-Null
 
-# Correct Zabbix Agent 2 download URL
-$zipFile = "$WorkDir\zabbix.zip"
-$downloadUrl = "https://cdn.zabbix.com/zabbix/binaries/stable/7.0/$ZabbixVersion/zabbix_agent2-$ZabbixVersion-windows-amd64-openssl-static.zip"
+# Detect hostname & IP
+$Hostname = (hostname)
+$IPAddress = (Get-NetIPAddress | Where-Object { $_.AddressFamily -eq "IPv4" -and $_.IPAddress -notlike "169.*" }).IPAddress | Select-Object -First 1
 
-Write-Host "Downloading Zabbix Agent 2 ZIP package..." -ForegroundColor Cyan
+Write-Host "Detected Hostname: $Hostname"
+Write-Host "Detected IP Address: $IPAddress"
+
+# Download Zabbix Agent 2
+Write-Host "Downloading Zabbix Agent 2 ZIP package..."
 Invoke-WebRequest -Uri $downloadUrl -OutFile $zipFile
 
-Write-Host "Extracting Zabbix Agent 2..." -ForegroundColor Cyan
+# Extract files
+Write-Host "Extracting Zabbix Agent 2..."
 Expand-Archive -Path $zipFile -DestinationPath "$WorkDir\unzipped" -Force
 
-# Install path
-$AgentPath = "C:\Program Files\Zabbix Agent 2"
+# Create target folder
 New-Item -ItemType Directory -Force -Path $AgentPath | Out-Null
 
 # Copy binaries
 Copy-Item "$WorkDir\unzipped\bin\zabbix_agent2.exe" $AgentPath -Force
 Copy-Item "$WorkDir\unzipped\conf\zabbix_agent2.conf" $AgentPath -Force
 
-# Update config
-$ConfigFile = "$AgentPath\zabbix_agent2.conf"
-
-(Get-Content $ConfigFile) |
-    ForEach-Object {
-        $_ -replace '^Server=.*', "Server=$ZabbixServer" `
-           -replace '^ServerActive=.*', "ServerActive=$ZabbixServer" `
-           -replace '^Hostname=.*', "Hostname=$HostName"
-    } | Set-Content $ConfigFile
+# Configure Zabbix agent
+(Get-Content $ConfigFile) `
+    -replace "^Server=.*", "Server=$ServerIP" `
+    -replace "^ServerActive=.*", "ServerActive=$ServerIP" `
+    -replace "^Hostname=.*", "Hostname=$Hostname" `
+    | Set-Content $ConfigFile
 
 # Install service
-Write-Host "Installing Zabbix Agent 2 as service..." -ForegroundColor Cyan
+Write-Host "Installing Zabbix Agent 2 as service..."
 & "$AgentPath\zabbix_agent2.exe" --install
 
-# Start service
+# Start & enable service
 Start-Service "Zabbix Agent 2"
 Set-Service -Name "Zabbix Agent 2" -StartupType Automatic
 
-Write-Host "Zabbix Agent 2 successfully installed & running!" -ForegroundColor Green
-Write-Host "Machine IP: $IpAddress"
-Write-Host "Hostname: $HostName"
-Write-Host "Server: $ZabbixServer"
+Write-Host ""
+Write-Host "Zabbix Agent 2 successfully installed & running!"
+Write-Host "Machine IP: $IPAddress"
+Write-Host "Hostname: $Hostname"
+Write-Host "Server: $ServerIP"
